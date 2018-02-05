@@ -1,0 +1,127 @@
+package gke
+
+import (
+	"context"
+	"regexp"
+
+	"github.com/appscode/go/errors"
+	"github.com/appscode/go/wait"
+	api "github.com/pharmer/pharmer/apis/v1alpha1"
+	. "github.com/pharmer/pharmer/cloud"
+	"github.com/pharmer/pharmer/credential"
+	"golang.org/x/oauth2/google"
+	compute "google.golang.org/api/compute/v1"
+	container "google.golang.org/api/container/v1"
+	"fmt"
+)
+
+const (
+	ProviderName = "gke"
+	TemplateURI  = "https://www.googleapis.com/compute/v1/projects/"
+)
+
+var providerIdRE = regexp.MustCompile(`^` + ProviderName + `://([^/]+)/([^/]+)/([^/]+)$`)
+var templateNameRE = regexp.MustCompile(`^` + TemplateURI + `([^/]+)/global/instanceTemplates/([^/]+)$`)
+
+type cloudConnector struct {
+	ctx     context.Context
+	cluster *api.Cluster
+	namer   namer
+
+	containerService *container.Service
+	computeService   *compute.Service
+}
+
+func NewConnector(ctx context.Context, cluster *api.Cluster) (*cloudConnector, error) {
+	cred, err := Store(ctx).Credentials().Get(cluster.Spec.CredentialName)
+	if err != nil {
+		return nil, err
+	}
+	typed := credential.GCE{CommonSpec: credential.CommonSpec(cred.Spec)}
+	if ok, err := typed.IsValid(); !ok {
+		return nil, errors.New().WithMessagef("Credential %s is invalid. Reason: %v", cluster.Spec.CredentialName, err)
+	}
+
+	cluster.Spec.Cloud.Project = typed.ProjectID()
+	conf, err := google.JWTConfigFromJSON([]byte(typed.ServiceAccount()),
+		container.CloudPlatformScope)
+	if err != nil {
+		return nil, errors.FromErr(err).WithContext(ctx).Err()
+	}
+	client := conf.Client(context.Background())
+	containerService, err := container.New(client)
+	if err != nil {
+		return nil, errors.FromErr(err).WithContext(ctx).Err()
+	}
+
+	computeService, err := compute.New(client)
+	if err != nil {
+		return nil, errors.FromErr(err).WithContext(ctx).Err()
+	}
+
+	conn := cloudConnector{
+		ctx:              ctx,
+		cluster:          cluster,
+		containerService: containerService,
+		computeService:   computeService,
+	}
+	/*if ok, msg := conn.IsUnauthorized(typed.ProjectID()); !ok {
+		return nil, fmt.Errorf("Credential %s does not have necessary authorization. Reason: %s.", cluster.Spec.CredentialName, msg)
+	}*/
+	return &conn, nil
+}
+
+// Returns true if unauthorized
+/*
+func (conn *cloudConnector) IsUnauthorized(project string) (bool, string) {
+	_, err := conn.containerService.Projects.Zones.Clusters..InstanceGroups.List(project, "us-central1-b").Do()
+	if err != nil {
+		return false, "Credential missing required authorization"
+	}
+	return true, ""
+}*/
+
+func (conn *cloudConnector) waitForZoneOperation(operation string) error {
+	attempt := 0
+	return wait.PollImmediate(RetryInterval, RetryTimeout, func() (bool, error) {
+		attempt++
+
+		r1, err := conn.containerService.Projects.Zones.Operations.Get(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, operation).Do()
+		fmt.Println(err)
+		if err != nil {
+			return false, nil
+		}
+
+		Logger(conn.ctx).Infof("Attempt %v: Operation %v is %v ...", attempt, operation)
+		if r1.Status == "DONE" {
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+func (conn *cloudConnector) ensureNetworks() error {
+	Logger(conn.ctx).Infof("Retrieving network %v for project %v", defaultNetwork, conn.cluster.Spec.Cloud.Project)
+	r2, err := conn.computeService.Networks.Insert(conn.cluster.Spec.Cloud.Project, &compute.Network{
+		IPv4Range: conn.cluster.Spec.Networking.PodSubnet,
+		Name:      defaultNetwork,
+	}).Do()
+	Logger(conn.ctx).Debug("Created new network", r2, err)
+	if err != nil {
+		return errors.FromErr(err).WithContext(conn.ctx).Err()
+	}
+	Logger(conn.ctx).Infof("New network %v is created", defaultNetwork)
+
+	return nil
+}
+
+func (conn *cloudConnector) getNetworks() (bool, error) {
+	Logger(conn.ctx).Infof("Retrieving network %v for project %v", defaultNetwork, conn.cluster.Spec.Cloud.Project)
+	r1, err := conn.computeService.Networks.Get(conn.cluster.Spec.Cloud.Project, defaultNetwork).Do()
+	Logger(conn.ctx).Debug("Retrieve network result", r1, err)
+	if err != nil {
+		return false, err
+	}
+	conn.cluster.Spec.Networking.PodSubnet = r1.IPv4Range
+	return true, nil
+}

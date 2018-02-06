@@ -144,9 +144,9 @@ type GoogleSpec struct {
 }
 
 type GkeSpec struct {
-	UserName    string `json:"userName,omitempty" protobuf:"bytes,1,opt,name=userName"`
-	Password    string `json:"password,omitempty" protobuf:"bytes,2,opt,name=password"`
-	NetworkName string `json:"networkName,omitempty" protobuf:"bytes,3,opt,name=networkName"`
+	UserName    string   `json:"userName,omitempty" protobuf:"bytes,1,opt,name=userName"`
+	Password    string   `json:"password,omitempty" protobuf:"bytes,2,opt,name=password"`
+	NetworkName string   `json:"networkName,omitempty" protobuf:"bytes,3,opt,name=networkName"`
 }
 
 type AzureSpec struct {
@@ -309,7 +309,12 @@ func (c *Cluster) KubernetesClusterIP() string {
 func (c Cluster) APIServerURL() string {
 	m := map[core.NodeAddressType]string{}
 	for _, addr := range c.Status.APIAddresses {
-		m[addr.Type] = fmt.Sprintf("https://%s:%d", addr.Address, c.Spec.API.BindPort)
+		if c.Spec.API.BindPort == 0 {
+			m[addr.Type] = fmt.Sprintf("https://%s", addr.Address)
+		} else {
+			m[addr.Type] = fmt.Sprintf("https://%s:%d", addr.Address, c.Spec.API.BindPort)
+		}
+
 	}
 	if u, found := m[core.NodeExternalIP]; found {
 		return u

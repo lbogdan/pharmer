@@ -44,29 +44,9 @@ func (cm *ClusterManager) SetDefaults(cluster *api.Cluster) error {
 
 	//cluster.Spec.Cloud.InstanceImageProject = "ubuntu-os-cloud"
 	cluster.Spec.Cloud.InstanceImage = "Ubuntu"
-	//cluster.Spec.Cloud.CCMCredentialName = cluster.Spec.CredentialName
 	cluster.Spec.Networking.NonMasqueradeCIDR = "10.0.0.0/8"
 	cluster.Spec.Networking.PodSubnet = "10.244.0.0/16"
 	cluster.Spec.Networking.NetworkProvider = "CALICO"
-	/*cluster.Spec.AuthorizationModes = strings.Split(kubeadmapi.DefaultAuthorizationModes, ",")
-	cluster.Spec.APIServerCertSANs = NameGenerator(cm.ctx).ExtraNames(cluster.Name)
-	cluster.Spec.APIServerExtraArgs = map[string]string{
-		// ref: https://github.com/kubernetes/kubernetes/blob/d595003e0dc1b94455d1367e96e15ff67fc920fa/cmd/kube-apiserver/app/options/options.go#L99
-		"kubelet-preferred-address-types": strings.Join([]string{
-			string(core.NodeHostName),
-			string(core.NodeInternalDNS),
-			string(core.NodeInternalIP),
-			string(core.NodeExternalDNS),
-			string(core.NodeExternalIP),
-		}, ","),
-		"cloud-config": "/etc/kubernetes/ccm/cloud-config",
-	}
-	if cluster.IsMinorVersion("1.9") {
-		cluster.Spec.APIServerExtraArgs["admission-control"] = api.DeprecatedV19AdmissionControl
-	}
-	cluster.Spec.ControllerManagerExtraArgs = map[string]string{
-		"cloud-config": "/etc/kubernetes/ccm/cloud-config",
-	}*/
 
 	cluster.Spec.Cloud.GKE = &api.GkeSpec{
 		UserName:    n.AdminUsername(),

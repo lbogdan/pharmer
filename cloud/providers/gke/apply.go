@@ -10,6 +10,7 @@ import (
 	//	"k8s.io/client-go/kubernetes"
 	container "google.golang.org/api/container/v1"
 	//"github.com/appscode/errors"
+	"k8s.io/client-go/kubernetes"
 )
 
 func (cm *ClusterManager) Apply(in *api.Cluster, dryRun bool) ([]api.Action, error) {
@@ -43,28 +44,108 @@ func (cm *ClusterManager) Apply(in *api.Cluster, dryRun bool) ([]api.Action, err
 		acts = append(acts, a...)
 	}
 
+	if cm.cluster.DeletionTimestamp != nil && cm.cluster.Status.Phase != api.ClusterDeleted {
+		a, err := cm.applyDelete(dryRun)
+		if err != nil {
+			return nil, err
+		}
+		acts = append(acts, a...)
+	}
+
 	return acts, nil
 }
 
 func (cm *ClusterManager) applyCreate(dryRun bool) (acts []api.Action, err error) {
 	found, _ := cm.conn.getNetworks()
 	if !found {
-		if err = cm.conn.ensureNetworks(); err != nil {
-			return
+		acts = append(acts, api.Action{
+			Action:   api.ActionAdd,
+			Resource: "Default Network",
+			Message:  "Not found, will add default network with ipv4 range 10.240.0.0/16",
+		})
+		if !dryRun {
+			if err = cm.conn.ensureNetworks(); err != nil {
+				return acts, err
+			}
 		}
 	}
-	cluster, err := encodeCluster(cm.ctx, cm.cluster)
-	fmt.Println(err)
-	clusterRequest := &container.CreateClusterRequest{
-		Cluster: cluster,
+
+	acts = append(acts, api.Action{
+		Action:   api.ActionAdd,
+		Resource: "Kubernetes cluster",
+		Message:  fmt.Sprintf("Kubernetes cluster with name %v will be created", cm.cluster.Name),
+	})
+	var cluster *container.Cluster
+
+	cluster, _ = cm.conn.containerService.Projects.Zones.Clusters.Get(cm.conn.cluster.Spec.Cloud.Project, cm.conn.cluster.Spec.Cloud.Zone, cm.cluster.Name).Do()
+	if cluster == nil && !dryRun {
+		if cluster, err = encodeCluster(cm.ctx, cm.cluster); err != nil {
+			return acts, err
+		}
+
+		var op string
+		if op, err = cm.conn.createCluster(cluster); err != nil {
+			return acts, err
+		}
+		if err = cm.conn.waitForZoneOperation(op); err != nil {
+			cm.cluster.Status.Reason = err.Error()
+			return acts, err
+		}
+
+		cluster, err = cm.conn.containerService.Projects.Zones.Clusters.Get(cm.conn.cluster.Spec.Cloud.Project, cm.conn.cluster.Spec.Cloud.Zone, cm.cluster.Name).Do()
+		if err != nil {
+			return acts, err
+		}
+		cm.retrieveClusterStatus(cluster)
+		err = cm.StoreCertificate(cluster)
+		if err != nil {
+			return acts, err
+		}
+		if cm.ctx, err = LoadCACertificates(cm.ctx, cm.cluster); err != nil {
+			return acts, err
+		}
+		var kc kubernetes.Interface
+		if kc, err = NewAdminClient(cm.ctx, cm.cluster); err != nil {
+			return acts, err
+		}
+		if err = WaitForReadyMaster(cm.ctx, kc); err != nil {
+			cm.cluster.Status.Reason = err.Error()
+			return acts, err
+		}
+
+		cm.cluster.Status.Phase = api.ClusterReady
+		if _, err = Store(cm.ctx).Clusters().UpdateStatus(cm.cluster); err != nil {
+			return acts, err
+		}
 	}
-	resp, err := cm.conn.containerService.Projects.Zones.Clusters.Create(cm.conn.cluster.Spec.Cloud.Project, cm.conn.cluster.Spec.Cloud.Zone, clusterRequest).Do()
-	fmt.Println(resp, err, resp.OperationType)
-	if err = cm.conn.waitForZoneOperation(resp.Name); err != nil {
+
+	return acts, nil
+}
+
+func (cm *ClusterManager) applyDelete(dryRun bool) (acts []api.Action, err error) {
+	if cm.cluster.Status.Phase == api.ClusterReady {
+		cm.cluster.Status.Phase = api.ClusterDeleting
+	}
+	_, err = Store(cm.ctx).Clusters().UpdateStatus(cm.cluster)
+	if err != nil {
+		return
+	}
+	acts = append(acts, api.Action{
+		Action:   api.ActionDelete,
+		Resource: "Kubernetes cluster",
+		Message:  fmt.Sprintf("%v cluster will be deleted", cm.cluster.Name),
+	})
+	var op string
+	op, err = cm.conn.deleteCluster()
+	if err = cm.conn.waitForZoneOperation(op); err != nil {
 		cm.cluster.Status.Reason = err.Error()
 		return acts, err
 	}
 
-//	cm.conn.containerService.Projects.Zones.Clusters.Get()
+	if !dryRun {
+		cm.cluster.Status.Phase = api.ClusterDeleted
+		Store(cm.ctx).Clusters().Update(cm.cluster)
+	}
+
 	return
 }

@@ -2,6 +2,7 @@ package gke
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/appscode/go/errors"
@@ -12,7 +13,6 @@ import (
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	container "google.golang.org/api/container/v1"
-	"fmt"
 )
 
 const (
@@ -124,4 +124,26 @@ func (conn *cloudConnector) getNetworks() (bool, error) {
 	}
 	conn.cluster.Spec.Networking.PodSubnet = r1.IPv4Range
 	return true, nil
+}
+
+func (conn *cloudConnector) createCluster(cluster *container.Cluster) (string, error) {
+	clusterRequest := &container.CreateClusterRequest{
+		Cluster: cluster,
+	}
+
+	resp, err := conn.containerService.Projects.Zones.Clusters.Create(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, clusterRequest).Do()
+	Logger(conn.ctx).Debug("Created kubernetes cluster", resp, err)
+	if err != nil {
+		return "", err
+	}
+	return resp.Name, nil
+}
+
+func (conn *cloudConnector) deleteCluster() (string, error) {
+	resp, err := conn.containerService.Projects.Zones.Clusters.Delete(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name).Do()
+	Logger(conn.ctx).Debug("Deleted kubernetes cluster", resp, err)
+	if err != nil {
+		return "", err
+	}
+	return resp.Name, nil
 }

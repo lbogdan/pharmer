@@ -144,9 +144,9 @@ type GoogleSpec struct {
 }
 
 type GkeSpec struct {
-	UserName    string   `json:"userName,omitempty" protobuf:"bytes,1,opt,name=userName"`
-	Password    string   `json:"password,omitempty" protobuf:"bytes,2,opt,name=password"`
-	NetworkName string   `json:"networkName,omitempty" protobuf:"bytes,3,opt,name=networkName"`
+	UserName    string `json:"userName,omitempty" protobuf:"bytes,1,opt,name=userName"`
+	Password    string `json:"password,omitempty" protobuf:"bytes,2,opt,name=password"`
+	NetworkName string `json:"networkName,omitempty" protobuf:"bytes,3,opt,name=networkName"`
 }
 
 type AzureSpec struct {

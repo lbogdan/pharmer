@@ -147,3 +147,48 @@ func (conn *cloudConnector) deleteCluster() (string, error) {
 	}
 	return resp.Name, nil
 }
+
+func (conn *cloudConnector) scaleNoodPool(ng *api.NodeGroup) (string, error) {
+	var np *container.NodePool
+	np, _ = conn.containerService.Projects.Zones.Clusters.NodePools.Get(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name).Do()
+
+	if np == nil {
+		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Create(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, &container.CreateNodePoolRequest{
+			NodePool: &container.NodePool{
+				Config: &container.NodeConfig{
+					MachineType: ng.Spec.Template.Spec.SKU,
+					DiskSizeGb:  ng.Spec.Template.Spec.DiskSize,
+					ImageType:   conn.cluster.Spec.Cloud.InstanceImage,
+				},
+				InitialNodeCount: ng.Spec.Nodes,
+				Name:             ng.Name,
+			},
+		}).Do()
+		if err != nil {
+			return "", err
+		}
+		return resp.Name, nil
+	}
+	if ng.Spec.Nodes == 0 || ng.DeletionTimestamp != nil {
+		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Delete(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name).Do()
+		if err != nil {
+			return "", err
+		}
+		err = Store(conn.ctx).NodeGroups(conn.cluster.Name).Delete(ng.Name)
+		if err != nil {
+			return "", err
+		}
+		return resp.Name, nil
+	}
+	if np.InitialNodeCount != ng.Spec.Nodes {
+		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.SetSize(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name,
+			&container.SetNodePoolSizeRequest{
+				NodeCount: ng.Spec.Nodes,
+			}).Do()
+		if err != nil {
+			return "", err
+		}
+		return resp.Name, nil
+	}
+	return "", nil
+}

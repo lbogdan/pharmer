@@ -2,11 +2,14 @@ package gke
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	api "github.com/pharmer/pharmer/apis/v1alpha1"
 	. "github.com/pharmer/pharmer/cloud"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/cert"
 )
 
 const (
@@ -47,10 +50,33 @@ func (cm *ClusterManager) GetAdminClient() (kubernetes.Interface, error) {
 		return kc, nil
 	}
 
-	kc, err := NewAdminClient(cm.ctx, cm.cluster)
+	kc, err := NewGKEAdminClient(cm.ctx, cm.cluster)
 	if err != nil {
 		return nil, err
 	}
 	cm.ctx = context.WithValue(cm.ctx, paramK8sClient{}, kc)
 	return kc, nil
+}
+
+func NewGKEAdminClient(ctx context.Context, cluster *api.Cluster) (kubernetes.Interface, error) {
+	adminCert, adminKey, err := GetAdminCertificate(ctx, cluster)
+	if err != nil {
+		return nil, err
+	}
+	host := cluster.APIServerURL()
+	if host == "" {
+		return nil, fmt.Errorf("failed to detect api server url for cluster %s", cluster.Name)
+	}
+	cfg := &rest.Config{
+		Host:     host,
+		Username: cluster.Spec.Cloud.GKE.UserName,
+		Password: cluster.Spec.Cloud.GKE.Password,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:   cert.EncodeCertPEM(CACert(ctx)),
+			CertData: cert.EncodeCertPEM(adminCert),
+			KeyData:  cert.EncodePrivateKeyPEM(adminKey),
+		},
+	}
+
+	return kubernetes.NewForConfig(cfg)
 }

@@ -110,7 +110,7 @@ func (cm *ClusterManager) applyCreate(dryRun bool) (acts []api.Action, err error
 			return acts, err
 		}
 		var kc kubernetes.Interface
-		if kc, err = NewAdminClient(cm.ctx, cm.cluster); err != nil {
+		if kc, err = cm.GetAdminClient(); err != nil {
 			return acts, err
 		}
 		if err = WaitForReadyMaster(cm.ctx, kc); err != nil {

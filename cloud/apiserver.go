@@ -2,8 +2,6 @@ package cloud
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
 	"fmt"
 	"time"
 
@@ -43,16 +41,9 @@ func FindMasterNodeGroup(nodeGroups []*api.NodeGroup) (*api.NodeGroup, error) {
 // WARNING:
 // Returned KubeClient uses admin client cert. This should only be used for cluster provisioning operations.
 func NewAdminClient(ctx context.Context, cluster *api.Cluster) (kubernetes.Interface, error) {
-	var adminCert *x509.Certificate
-	var adminKey *rsa.PrivateKey
-	var err error
-	if cluster.Spec.Cloud.CloudProvider != "gke" {
-		adminCert, adminKey, err = GetAdminCertificate(ctx, cluster)
-	} else {
-		adminCert, adminKey, err = CreateAdminCertificate(ctx)
-		if err != nil {
-			return nil, err
-		}
+	adminCert, adminKey, err := CreateAdminCertificate(ctx)
+	if err != nil {
+		return nil, err
 	}
 	host := cluster.APIServerURL()
 	if host == "" {
@@ -66,11 +57,6 @@ func NewAdminClient(ctx context.Context, cluster *api.Cluster) (kubernetes.Inter
 			KeyData:  cert.EncodePrivateKeyPEM(adminKey),
 		},
 	}
-	if cluster.Spec.Cloud.CloudProvider == "gke" {
-		cfg.Username = cluster.Spec.Cloud.GKE.UserName
-		cfg.Password = cluster.Spec.Cloud.GKE.Password
-	}
-
 	return kubernetes.NewForConfig(cfg)
 }
 

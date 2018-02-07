@@ -2,14 +2,11 @@ package gke
 
 import (
 	"fmt"
-	//"github.com/appscode/go/errors"
+
 	api "github.com/pharmer/pharmer/apis/v1alpha1"
 	. "github.com/pharmer/pharmer/cloud"
-	//	core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//	"k8s.io/client-go/kubernetes"
 	container "google.golang.org/api/container/v1"
-	//"github.com/appscode/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -137,20 +134,17 @@ func (cm *ClusterManager) applyScale(dryRun bool) (acts []api.Action, err error)
 		return
 	}
 	for _, ng := range nodeGroups {
-		var op string
-		op, err = cm.conn.scaleNoodPool(ng)
+		igm := NewGKENodeGroupManager(cm.ctx, cm.conn, cm.namer, ng)
+		var a2 []api.Action
+		a2, err = igm.Apply(dryRun)
 		if err != nil {
 			return
 		}
-		if op != "" {
-			if err = cm.conn.waitForZoneOperation(op); err != nil {
-				cm.cluster.Status.Reason = err.Error()
-				return acts, err
-			}
-		}
+		acts = append(acts, a2...)
 	}
+	Store(cm.ctx).Clusters().UpdateStatus(cm.cluster)
+	Store(cm.ctx).Clusters().Update(cm.cluster)
 	return
-
 }
 
 func (cm *ClusterManager) applyDelete(dryRun bool) (acts []api.Action, err error) {

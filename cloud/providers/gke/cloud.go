@@ -3,7 +3,6 @@ package gke
 import (
 	"context"
 	"fmt"
-	"regexp"
 
 	"github.com/appscode/go/errors"
 	"github.com/appscode/go/wait"
@@ -19,9 +18,6 @@ const (
 	ProviderName = "gke"
 	TemplateURI  = "https://www.googleapis.com/compute/v1/projects/"
 )
-
-var providerIdRE = regexp.MustCompile(`^` + ProviderName + `://([^/]+)/([^/]+)/([^/]+)$`)
-var templateNameRE = regexp.MustCompile(`^` + TemplateURI + `([^/]+)/global/instanceTemplates/([^/]+)$`)
 
 type cloudConnector struct {
 	ctx     context.Context
@@ -65,21 +61,21 @@ func NewConnector(ctx context.Context, cluster *api.Cluster) (*cloudConnector, e
 		containerService: containerService,
 		computeService:   computeService,
 	}
-	/*if ok, msg := conn.IsUnauthorized(typed.ProjectID()); !ok {
+	if ok, msg := conn.IsUnauthorized(typed.ProjectID()); !ok {
 		return nil, fmt.Errorf("Credential %s does not have necessary authorization. Reason: %s.", cluster.Spec.CredentialName, msg)
-	}*/
+	}
 	return &conn, nil
 }
 
 // Returns true if unauthorized
-/*
+
 func (conn *cloudConnector) IsUnauthorized(project string) (bool, string) {
-	_, err := conn.containerService.Projects.Zones.Clusters..InstanceGroups.List(project, "us-central1-b").Do()
+	_, err := conn.containerService.Projects.Zones.Clusters.List(project, "us-central1-b").Do()
 	if err != nil {
 		return false, "Credential missing required authorization"
 	}
 	return true, ""
-}*/
+}
 
 func (conn *cloudConnector) waitForZoneOperation(operation string) error {
 	attempt := 0
@@ -87,12 +83,11 @@ func (conn *cloudConnector) waitForZoneOperation(operation string) error {
 		attempt++
 
 		r1, err := conn.containerService.Projects.Zones.Operations.Get(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, operation).Do()
-		fmt.Println(err)
 		if err != nil {
 			return false, nil
 		}
 
-		Logger(conn.ctx).Infof("Attempt %v: Operation %v is %v ...", attempt, operation)
+		Logger(conn.ctx).Infof("Attempt %v: Operation %v is %v ...", attempt, operation, r1.Status)
 		if r1.Status == "DONE" {
 			return true, nil
 		}
@@ -148,47 +143,39 @@ func (conn *cloudConnector) deleteCluster() (string, error) {
 	return resp.Name, nil
 }
 
-func (conn *cloudConnector) scaleNoodPool(ng *api.NodeGroup) (string, error) {
-	var np *container.NodePool
-	np, _ = conn.containerService.Projects.Zones.Clusters.NodePools.Get(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name).Do()
-
-	if np == nil {
-		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Create(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, &container.CreateNodePoolRequest{
-			NodePool: &container.NodePool{
-				Config: &container.NodeConfig{
-					MachineType: ng.Spec.Template.Spec.SKU,
-					DiskSizeGb:  ng.Spec.Template.Spec.DiskSize,
-					ImageType:   conn.cluster.Spec.Cloud.InstanceImage,
-				},
-				InitialNodeCount: ng.Spec.Nodes,
-				Name:             ng.Name,
+func (conn *cloudConnector) addNodePool(ng *api.NodeGroup) (string, error) {
+	resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Create(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, &container.CreateNodePoolRequest{
+		NodePool: &container.NodePool{
+			Config: &container.NodeConfig{
+				MachineType: ng.Spec.Template.Spec.SKU,
+				DiskSizeGb:  ng.Spec.Template.Spec.DiskSize,
+				ImageType:   conn.cluster.Spec.Cloud.InstanceImage,
 			},
+			InitialNodeCount: ng.Spec.Nodes,
+			Name:             ng.Name,
+		},
+	}).Do()
+	if err != nil {
+		return "", err
+	}
+	return resp.Name, nil
+}
+
+func (conn *cloudConnector) deleteNoodPool(ng *api.NodeGroup) (string, error) {
+	resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Delete(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name).Do()
+	if err != nil {
+		return "", err
+	}
+	return resp.Name, nil
+}
+
+func (conn *cloudConnector) adjustNoodPool(ng *api.NodeGroup) (string, error) {
+	resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.SetSize(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name,
+		&container.SetNodePoolSizeRequest{
+			NodeCount: ng.Spec.Nodes,
 		}).Do()
-		if err != nil {
-			return "", err
-		}
-		return resp.Name, nil
+	if err != nil {
+		return "", err
 	}
-	if ng.Spec.Nodes == 0 || ng.DeletionTimestamp != nil {
-		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.Delete(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name).Do()
-		if err != nil {
-			return "", err
-		}
-		err = Store(conn.ctx).NodeGroups(conn.cluster.Name).Delete(ng.Name)
-		if err != nil {
-			return "", err
-		}
-		return resp.Name, nil
-	}
-	if np.InitialNodeCount != ng.Spec.Nodes {
-		resp, err := conn.containerService.Projects.Zones.Clusters.NodePools.SetSize(conn.cluster.Spec.Cloud.Project, conn.cluster.Spec.Cloud.Zone, conn.cluster.Name, ng.Name,
-			&container.SetNodePoolSizeRequest{
-				NodeCount: ng.Spec.Nodes,
-			}).Do()
-		if err != nil {
-			return "", err
-		}
-		return resp.Name, nil
-	}
-	return "", nil
+	return resp.Name, nil
 }

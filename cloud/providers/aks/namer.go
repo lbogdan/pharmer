@@ -86,3 +86,11 @@ func (n namer) BlobName(instanceName string) string {
 	return instanceName + "-osdisk.vhd"
 
 }
+
+func (n namer) GetNodeGroupName(ng string) string {
+	name := strings.ToLower(ng)
+	name = strings.Replace(name, "standard", "s", -1)
+	name = strings.Replace(name, "pool", "p", -1)
+	name = strings.Replace(name, "-", "", -1)
+	return name
+}

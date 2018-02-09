@@ -1,5 +1,5 @@
-hash: 47714f81d0e4ac0cdf7654892668b5ef52b417d9c5d00d4e6cdbe98a581ff7fe
-updated: 2018-01-30T05:40:52.575601219-08:00
+hash: a082d68d124cc5d0324921c6682a15a78853453cd9c2cd91a98017e1bef2bd4f
+updated: 2018-02-08T13:08:24.540626073+06:00
 imports:
 - name: cloud.google.com/go
   version: 3b1ae45394a234c385be014e9a488f2bb6eef821
@@ -7,7 +7,7 @@ imports:
   - compute/metadata
   - internal
 - name: github.com/appscode/go
-  version: 99dbf420807d9459b63d1d0bf702537bb7aa976f
+  version: fe2dd84a755c383d0516595f4537c2298be9fce5
   subpackages:
   - analytics
   - context
@@ -33,7 +33,7 @@ imports:
 - name: github.com/appscode/go-hetzner
   version: 8422868c02472db5abe7a701820d062e11063ad9
 - name: github.com/appscode/kutil
-  version: a035b515d68bca793b2beacdf52e19a02f914017
+  version: 4ab7a342c2a4ee464d28146b8c9330c266336fba
   subpackages:
   - tools/backup
 - name: github.com/appscode/mergo
@@ -80,22 +80,25 @@ imports:
   - service/s3/s3manager
   - service/sts
 - name: github.com/Azure/azure-sdk-for-go
-  version: 2d49bb8f2cee530cc16f1f1a9f0aae763dee257d
+  version: f111fc2fa3861c5fdced76cae4c9c71821969577
   subpackages:
   - arm/authorization
   - arm/compute
+  - arm/containerservice
   - arm/graphrbac
   - arm/network
   - arm/resources/resources
   - arm/resources/subscriptions
   - arm/storage
+  - profiles/latest/containerservice/mgmt/containerservice
+  - services/containerservice/mgmt/2017-09-30/containerservice
   - storage
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
   subpackages:
   - winterm
 - name: github.com/Azure/go-autorest
-  version: f6e08fe5e4d45c9a66e40196d3fed5f37331d224
+  version: d4e6b95c12a08b4de2d48b45d5b4d594e5d32fab
   subpackages:
   - autorest
   - autorest/adal
@@ -184,7 +187,7 @@ imports:
   subpackages:
   - spdy
 - name: github.com/dustin/go-humanize
-  version: bb3d318650d48840a39aa21a027c6630e198e626
+  version: f3565c9525600a911af3bd34f8b535ea81b2a9e0
 - name: github.com/emicklei/go-restful
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
   subpackages:
@@ -194,11 +197,13 @@ imports:
 - name: github.com/exponent-io/jsonpath
   version: d6023ce2651d8eafb5c75bb0c7167536102ec9f5
 - name: github.com/facebookgo/stack
-  version: 751773369052141c013c6e827a71e8f35c07879c
+  version: d9d227395bc3d7a635388c75b2e3b3a750e11888
 - name: github.com/fatih/camelcase
   version: f6a740d52f961c60348ebb109adde9f4635d7540
 - name: github.com/fatih/color
   version: 9aae6aaa22315390f03959adca2c4d395b02fcef
+- name: github.com/fsnotify/fsnotify
+  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: github.com/ghodss/yaml
   version: 0ca9ea5df5451ffdf184b4428c902747c2c11cd7
 - name: github.com/go-ini/ini
@@ -212,7 +217,7 @@ imports:
 - name: github.com/go-openapi/swag
   version: f3f9494671f93fcff853e3c6e9e948b3eb71e590
 - name: github.com/go-xorm/builder
-  version: 488224409dd8aa2ce7a5baf8d10d55764a913738
+  version: db75972580de4a7c6c20fff5b16a924c3de3fa12
 - name: github.com/go-xorm/core
   version: 5bf745d7d163f4380e6c2bba8c4afa60534dd087
 - name: github.com/go-xorm/xorm
@@ -288,11 +293,11 @@ imports:
   subpackages:
   - diskcache
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: 42a2d1c4991e79a4a8318984e5c81031b21f3c76
+  version: b3206ea09f14f1f6c0a4ee3891f7b78341826f36
   repo: https://github.com/appscode/grpc-gateway.git
   vcs: git
 - name: github.com/hashicorp/go-version
-  version: 53932f80ddea12bea96be074f9fb2dc545806aba
+  version: 39c2af67036e26c310812b838b652cd91f66c9a7
   repo: https://github.com/appscode/go-version.git
   vcs: git
 - name: github.com/hashicorp/golang-lru
@@ -331,10 +336,12 @@ imports:
   - jwriter
 - name: github.com/MakeNowJust/heredoc
   version: bb23615498cded5e105af4ce27de75b089cbe851
+- name: github.com/marstr/guid
+  version: 8bdf7d1a087ccc975cf37dd6507da50698fd19ca
 - name: github.com/mattn/go-colorable
-  version: 6cc8b475d4682021d75d2cbe2bc481bec4ce98e5
+  version: 3dac7b4f76f6e17fb39b768b89e3783d16e237fe
 - name: github.com/mattn/go-isatty
-  version: 57fdcb988a5c543893cc61bce354a6e24ab70022
+  version: 56b76bdf51f7708750eac80fa38b952bb9f32639
 - name: github.com/matttproud/golang_protobuf_extensions
   version: fc2b8d3a73c4867e51861bbdd5ae3c1f0869dd6a
   subpackages:
@@ -346,7 +353,7 @@ imports:
 - name: github.com/mitchellh/go-wordwrap
   version: ad45545899c7b13c020ea92b2072220eefad42b8
 - name: github.com/moul/anonuuid
-  version: ebb9b023e8eede7d469a89f0d58f3155e78100b5
+  version: 609b752a95effbbef26d134ac18ed6f57e01b98e
 - name: github.com/moul/gotty-client
   version: b47f2c128b4d2447db6bf2a5f79aea81017899d4
 - name: github.com/mxk/go-flowrate
@@ -397,7 +404,7 @@ imports:
   - specs-go
   - specs-go/v1
 - name: github.com/packethost/packngo
-  version: f1be085ecd6fca1b0a0e25eda71f208dcfcee5ab
+  version: 2ab396b65ac5386fc9c84388850a97f50155d0b8
 - name: github.com/pborman/uuid
   version: e790cca94e6cc75c7064b1332e63811d4aae1a53
 - name: github.com/peterbourgon/diskv
@@ -436,8 +443,8 @@ imports:
   - fuzzy
 - name: github.com/russross/blackfriday
   version: 300106c228d52c8941d4b3de6054a6062a86dda3
-- name: github.com/satori/uuid
-  version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
+- name: github.com/satori/go.uuid
+  version: 36e9d2ebbde5e3f13ab2e25625fd453271d6522e
 - name: github.com/scaleway/scaleway-cli
   version: 53e53aa5e3ecd18f49ec69471e82c80d288afacc
   repo: https://github.com/tamalsaha/scaleway-cli.git
@@ -455,7 +462,7 @@ imports:
   subpackages:
   - open
 - name: github.com/softlayer/softlayer-go
-  version: b9d042f52a64abfd2777ec041b3bc3116263f88b
+  version: 792e2b462464b34b932dcbe2e8d1de98c80a89d5
   subpackages:
   - config
   - datatypes
@@ -463,7 +470,7 @@ imports:
   - session
   - sl
 - name: github.com/spf13/cobra
-  version: f62e98d28ab7ad31d707ba837a966378465c7b57
+  version: 93959269ad99e80983c9ba742a7e01203a4c0e4f
   subpackages:
   - doc
 - name: github.com/spf13/pflag
@@ -471,7 +478,7 @@ imports:
   repo: https://github.com/appscode/pflag.git
   vcs: git
 - name: github.com/taoh/linodego
-  version: 5f0faa1e1599da1906d23b58647c27983d51db04
+  version: d85493a2eaad404c21b1582ce1dc75e745a4ead5
   repo: https://github.com/appscode/linodego.git
   vcs: git
 - name: github.com/tent/http-link-go
@@ -504,7 +511,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sync
-  version: fd80eb99c8f653c847d294a001bdf2a3a6f768f5
+  version: 316e794f7b5e3df4e95175a45a5fb8b12f85cb4f
   subpackages:
   - errgroup
 - name: golang.org/x/sys
@@ -1108,7 +1115,7 @@ imports:
   - plugin/pkg/scheduler/util
   - plugin/pkg/scheduler/volumebinder
 - name: k8s.io/metrics
-  version: bc50bbd13d9f360ab1438b486623e1debd1f424d
+  version: 7619a6675e2689251ee22bcc56195dc52179f706
   subpackages:
   - pkg/apis/metrics
   - pkg/apis/metrics/v1alpha1

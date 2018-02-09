@@ -2,19 +2,19 @@ package aks
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/arm/compute"
-	"github.com/Azure/azure-sdk-for-go/arm/containerservice"
 	"github.com/Azure/azure-sdk-for-go/arm/resources/resources"
+	ms "github.com/Azure/azure-sdk-for-go/profiles/latest/containerservice/mgmt/containerservice"
+	cs "github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2017-09-30/containerservice"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/appscode/go/errors"
 	. "github.com/appscode/go/types"
+	"github.com/appscode/go/wait"
 	api "github.com/pharmer/pharmer/apis/v1alpha1"
 	. "github.com/pharmer/pharmer/cloud"
 	"github.com/pharmer/pharmer/credential"
@@ -32,9 +32,9 @@ type cloudConnector struct {
 	cluster *api.Cluster
 	namer   namer
 
-	availabilitySetsClient  compute.AvailabilitySetsClient
-	groupsClient            resources.GroupsClient
-	containerSvcClient 		containerservice.ContainerServicesClient
+	availabilitySetsClient compute.AvailabilitySetsClient
+	groupsClient           resources.GroupsClient
+	managedClient          ms.ManagedClustersClient
 }
 
 func NewConnector(ctx context.Context, cluster *api.Cluster) (*cloudConnector, error) {
@@ -69,14 +69,6 @@ func NewConnector(ctx context.Context, cluster *api.Cluster) (*cloudConnector, e
 		},
 	}
 
-	containerSvcClient := containerservice.ContainerServicesClient{
-		ManagementClient: containerservice.ManagementClient{
-			Client:         client,
-			BaseURI:        baseURI,
-			SubscriptionID: typed.SubscriptionID(),
-		},
-	}
-
 	groupsClient := resources.GroupsClient{
 		ManagementClient: resources.ManagementClient{
 			Client:         client,
@@ -85,23 +77,20 @@ func NewConnector(ctx context.Context, cluster *api.Cluster) (*cloudConnector, e
 		},
 	}
 
-
-
+	managedClient := ms.NewManagedClustersClient(typed.SubscriptionID())
+	managedClient.Authorizer = autorest.NewBearerAuthorizer(spt)
 
 	return &cloudConnector{
 		cluster: cluster,
 		ctx:     ctx,
-		availabilitySetsClient:  availabilitySetsClient,
-		containerSvcClient: containerSvcClient,
-		groupsClient:            groupsClient,
+		availabilitySetsClient: availabilitySetsClient,
+		groupsClient:           groupsClient,
+		managedClient:          managedClient,
 	}, nil
 }
 
 func (conn *cloudConnector) detectUbuntuImage() error {
-	conn.cluster.Spec.Cloud.OS = "UbuntuServer"
-	conn.cluster.Spec.Cloud.InstanceImageProject = "Canonical"
-	conn.cluster.Spec.Cloud.InstanceImage = "16.04-LTS"
-	conn.cluster.Spec.Cloud.Azure.InstanceImageVersion = "latest"
+	conn.cluster.Spec.Cloud.OS = string(cs.Linux)
 	return nil
 }
 
@@ -135,4 +124,99 @@ func (conn *cloudConnector) ensureAvailabilitySet() (compute.AvailabilitySet, er
 		},
 	}
 	return conn.availabilitySetsClient.CreateOrUpdate(conn.namer.ResourceGroupName(), name, req)
+}
+
+func (conn *cloudConnector) deleteResourceGroup() error {
+	_, errchan := conn.groupsClient.Delete(conn.namer.ResourceGroupName(), make(chan struct{}))
+	Logger(conn.ctx).Infof("Resource group %v deleted", conn.namer.ResourceGroupName())
+	return <-errchan
+}
+
+func (conn *cloudConnector) upsertAKS(agentPools []cs.AgentPoolProfile) error {
+	cred, err := Store(conn.ctx).Credentials().Get(conn.cluster.Spec.CredentialName)
+	if err != nil {
+		return err
+	}
+	typed := credential.Azure{CommonSpec: credential.CommonSpec(cred.Spec)}
+	if ok, err := typed.IsValid(); !ok {
+		return errors.New().WithMessagef("Credential %s is invalid. Reason: %v", conn.cluster.Spec.CredentialName, err)
+	}
+
+	container := cs.ManagedCluster{
+		Name:     &conn.cluster.Name,
+		Location: StringP(conn.cluster.Spec.Cloud.Zone),
+		ManagedClusterProperties: &cs.ManagedClusterProperties{
+			DNSPrefix: StringP(conn.cluster.Name),
+			//Fqdn:              StringP(conn.cluster.Name),
+			KubernetesVersion: StringP(conn.cluster.Spec.KubernetesVersion),
+			ServicePrincipalProfile: &cs.ServicePrincipalProfile{
+				ClientID: StringP(typed.ClientID()),
+				Secret:   StringP(typed.ClientSecret()),
+			},
+
+			AgentPoolProfiles: &agentPools,
+			LinuxProfile: &cs.LinuxProfile{
+				AdminUsername: StringP(conn.namer.AdminUsername()),
+				SSH: &cs.SSHConfiguration{
+					PublicKeys: &[]cs.SSHPublicKey{
+						{
+							KeyData: StringP(string(SSHKey(conn.ctx).PublicKey)),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err = conn.managedClient.CreateOrUpdate(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name, container)
+	if err != nil {
+		return err
+	}
+
+	return conn.WaitForClusterOperation()
+}
+
+func (conn *cloudConnector) WaitForClusterOperation() error {
+	attempt := 0
+	return wait.PollImmediate(RetryInterval, RetryTimeout, func() (bool, error) {
+		attempt++
+		r, err := conn.managedClient.Get(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name)
+		if err != nil {
+			return false, nil
+		}
+		Logger(conn.ctx).Infof("Attempt %v: Operation %v is %v ...", attempt, *r.Name, *r.ProvisioningState)
+		if *r.ProvisioningState == "Succeeded" {
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+func (conn *cloudConnector) deleteAKS() error {
+	_, err := conn.managedClient.Delete(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name)
+	return err
+}
+
+func (conn *cloudConnector) getUpgradeProfile() (bool, error) {
+	resp, err := conn.managedClient.GetUpgradeProfile(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name)
+	if err != nil {
+		return false, err
+	}
+	if *resp.ControlPlaneProfile.KubernetesVersion == conn.cluster.Spec.KubernetesVersion {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (conn *cloudConnector) upgradeCluster() error {
+	cluster, err := conn.managedClient.Get(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name)
+	if err != nil {
+		return err
+	}
+	cluster.KubernetesVersion = StringP(conn.cluster.Spec.KubernetesVersion)
+	_, err = conn.managedClient.CreateOrUpdate(context.Background(), conn.namer.ResourceGroupName(), conn.cluster.Name, cluster)
+	if err != nil {
+		return err
+	}
+	return conn.WaitForClusterOperation()
 }
